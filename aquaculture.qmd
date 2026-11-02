@@ -51,13 +51,20 @@ sstmean <- mean(sst) - 273.15
 Crop extent of depth raster to match that of SST raster
 
 ```{r}
-ext(bathy) <- ext(sst)raster
+ext(bathy) <- ext(sst)
 ```
 
 Resample the depth data to match the resolution of the SST data using the bilinear method approach
 
 ```{r}
 bathy_resample <- resample(bathy, sstmean, method = 'bilinear')
+```
+
+Make CRSs match
+
+```{r}
+crs(bathy_resample) <- crs(eez)
+crs(sstmean) <- crs(eez)
 ```
 
 check that the depth and SST match in resolution, extent and CRS
@@ -88,15 +95,39 @@ bathysuit[bathysuit < 0 | bathysuit > 70] <- 0
 bathysuit[bathysuit > 0] <- 1
 
 tm_shape(bathysuit) +
-    tm_polygons()
+    tm_raster()
 ```
 
 find locations that satisfy both SST and depth conditions
+
+```{r}
+suit <- bathysuit * sstsuit
+
+tm_shape(suit) +
+    tm_raster()
+```
 
 ## Determine the most suitable EEZ
 
 select suitable cells within West Coast EEZs
 
+```{r}
+suitoreg <- mask(suit, eez[1,]) # masking suitability to an EEZ
+suitorgepoly <- as.polygons(suitoreg) |> 
+    st_as_sf() 
+
+
+
+tm_shape(suitorgepoly) +
+    tm_polygons(fill = 'depth')
+```
+
 find area of grid cells
+
+```{r}
+st_area(suitorgepoly[2,])
+st_area(suitorgepoly[1,])
+
+```
 
 find the total suitable area within each EEZ (might be helpful to rasterize the EEZ data)
