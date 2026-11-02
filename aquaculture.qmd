@@ -1,0 +1,102 @@
+
+```{r}
+library(tidyverse)
+library(terra)
+library(tmap)
+library(here)
+library(sf)
+```
+
+## Prepare the data
+
+```{r}
+eez <- st_read('data/wc_regions') # West Coast Economic zones
+
+bathy <- rast('data/depth.tif') # Depth Raster
+
+sst2008 <- rast('data/average_annual_sst_2008.tif')
+sst2009 <- rast('data/average_annual_sst_2009.tif')
+sst2010 <- rast('data/average_annual_sst_2010.tif')
+sst2011 <- rast('data/average_annual_sst_2011.tif')
+sst2012 <- rast('data/average_annual_sst_2012.tif')
+
+sst <- c(sst2008, sst2009, sst2010, sst2011, sst2012) # Surface Temperatures for each year 2008-2012
+```
+
+## Explore
+
+```{r}
+tm_shape(eez) +
+    tm_polygons()
+
+tm_shape(bathy) +
+    tm_raster()
+
+tm_shape(sst) +
+    tm_raster()
+
+crs(eez) == crs(bathy) & crs(eez) == crs(sst) 
+
+ext(eez) == ext(bathy) & ext(eez) == ext(sst)
+```
+
+## Process the data
+
+Average the SST across 2008-2012 and convert to Celsius
+
+```{r}
+sstmean <- mean(sst) - 273.15 
+```
+
+Crop extent of depth raster to match that of SST raster
+
+```{r}
+ext(bathy) <- ext(sst)raster
+```
+
+Resample the depth data to match the resolution of the SST data using the bilinear method approach
+
+```{r}
+bathy_resample <- resample(bathy, sstmean, method = 'bilinear')
+```
+
+check that the depth and SST match in resolution, extent and CRS
+
+```{r}
+ext(bathy_resample) == ext(sstmean) &
+crs(bathy_resample) == crs(sstmean) &
+res(bathy_resample) == res(sstmean)
+```
+
+## Find suitable locations
+
+reclassify SST and depth data into locations that are suitable for oysters (make suitable = 1 and unsuitable = 0)
+
+```{r}
+# Subset sst to 11-30 degrees celsius
+sstsuit <- sstmean
+sstsuit[sstsuit > 30 | sstsuit < 11] <- 0
+sstsuit[sstsuit > 0] <- 1
+
+tm_shape(sstsuit) +
+    tm_raster()
+
+# Subset depth to 0-70 meters below sea level
+
+bathysuit <- bathy_resample
+bathysuit[bathysuit < 0 | bathysuit > 70] <- 0
+bathysuit[bathysuit > 0] <- 1
+
+tm_shape(bathysuit) +
+    tm_polygons()
+```
+
+find locations that satisfy both SST and depth conditions
+
+## Determine the most suitable EEZ
+
+select suitable cells within West Coast EEZs
+
+find area of grid cells
+
+find the total suitable area within each EEZ (might be helpful to rasterize the EEZ data)
