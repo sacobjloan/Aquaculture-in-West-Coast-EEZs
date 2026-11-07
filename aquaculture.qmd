@@ -1,3 +1,11 @@
+---
+title: Opportunities for Aquaculture in West Coast Economic Zones
+date: 11/5/2026
+author: Jacob Sloan
+---
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
 
 ```{r}
 library(tidyverse)
@@ -23,111 +31,93 @@ sst2012 <- rast('data/average_annual_sst_2012.tif')
 sst <- c(sst2008, sst2009, sst2010, sst2011, sst2012) # Surface Temperatures for each year 2008-2012
 ```
 
-## Explore
-
-```{r}
-tm_shape(eez) +
-    tm_polygons()
-
-tm_shape(bathy) +
-    tm_raster()
-
-tm_shape(sst) +
-    tm_raster()
-
-crs(eez) == crs(bathy) & crs(eez) == crs(sst) 
-
-ext(eez) == ext(bathy) & ext(eez) == ext(sst)
-```
 
 ## Process the data
 
 Average the SST across 2008-2012 and convert to Celsius
 
 ```{r}
-sstmean <- mean(sst) - 273.15 
+sstmean <- mean(sst, na.rm = TRUE) - 273.15 
 ```
 
 Crop extent of depth raster to match that of SST raster
 
 ```{r}
-ext(bathy) <- ext(sst)
+bathycrop <- crop(bathy,ext(sstmean))
 ```
 
 Resample the depth data to match the resolution of the SST data using the bilinear method approach
 
 ```{r}
-bathy_resample <- resample(bathy, sstmean, method = 'bilinear')
+bathy_resample <- resample(bathycrop, sstmean, method = 'bilinear')
 ```
 
 Make CRSs match
 
 ```{r}
-crs(bathy_resample) <- crs(eez)
-crs(sstmean) <- crs(eez)
+bathy_resample <- project(bathy_resample,crs(sstmean))
+eez <- st_transform(eez, crs(sstmean))
+
+crs(bathy_resample) == crs(sstmean)
+st_crs(bathy_resample) == st_crs(eez)
 ```
 
-check that the depth and SST match in resolution, extent and CRS
-
-```{r}
-ext(bathy_resample) == ext(sstmean) &
-crs(bathy_resample) == crs(sstmean) &
-res(bathy_resample) == res(sstmean)
-```
-
-## Find suitable locations
-
-reclassify SST and depth data into locations that are suitable for oysters (make suitable = 1 and unsuitable = 0)
-
-```{r}
-# Subset sst to 11-30 degrees celsius
-sstsuit <- sstmean
-sstsuit[sstsuit > 30 | sstsuit < 11] <- 0
-sstsuit[sstsuit > 0] <- 1
-
-tm_shape(sstsuit) +
-    tm_raster()
-
-# Subset depth to 0-70 meters below sea level
-
-bathysuit <- bathy_resample
-bathysuit[bathysuit < 0 | bathysuit > 70] <- 0
-bathysuit[bathysuit > 0] <- 1
-
-tm_shape(bathysuit) +
-    tm_raster()
-```
-
-find locations that satisfy both SST and depth conditions
-
-```{r}
-suit <- bathysuit * sstsuit
-
-tm_shape(suit) +
-    tm_raster()
-```
 
 ## Determine the most suitable EEZ
 
-select suitable cells within West Coast EEZs
+select suitable cells within West Coast EEZ
 
 ```{r}
-suitoreg <- mask(suit, eez[1,]) # masking suitability to an EEZ
-suitorgepoly <- as.polygons(suitoreg) |> 
-    st_as_sf() 
+can_we_grow_this_fish <- function(tempmin, tempmax, depthmin, depthmax, species = 'species') {
 
+    # Subset map for temperature
+    temp <- sstmean
+    temp[temp < tempmin | temp > tempmax] <- NA
+    temp[not.na(temp)] <- 1
 
+    # Subset map for depth
+    depth <- bathy_resample
+    depth[depth < depthmax | depth > depthmin] <- NA
+    depth[not.na(depth)] <- 1
 
-tm_shape(suitorgepoly) +
-    tm_polygons(fill = 'depth')
+    # Combine rasters
+    place <- temp * depth
+
+    # Find area of suitable area by EEZ
+    byeez <- function(x) {
+    poly <- as.polygons(mask(place,eez[x,])) |> 
+        st_as_sf()
+    st_area(poly[1,])
+    }
+
+    # Farmable area by EEZ 
+    suitarea <- eez |> 
+    mutate(suitable_area = c(byeez(1), byeez(2), byeez(3), byeez(4), byeez(5))) |> 
+    mutate(suitable_area = as.numeric(suitable_area/ 1000000))
+
+    # Map
+    tm_shape(suitarea) +
+        tm_polygons(fill ='suitable_area',
+            fill.scale = tm_scale_categorical(values = 'tableau.classic_blue'),
+            fill.legend = tm_legend(position = tm_pos_in('left','bottom'),
+            title = 'Suitable Area km2')) +
+        tm_basemap('OpenStreetMap.DE') +
+        tm_title(paste(species,'Aquaculture Area by West Coast EEZ')) +
+        tm_compass(position = tm_pos_in('left','top')) +
+        tm_scalebar(position = tm_pos_in('center','bottom'))
+}
 ```
-
-find area of grid cells
 
 ```{r}
-st_area(suitorgepoly[2,])
-st_area(suitorgepoly[1,])
-
+#| fig-width: 10
+#| fig-height: 7
+# Running the function for Oysters
+can_we_grow_this_fish(11, 30, 0, -70, species = 'Oyster')
 ```
 
-find the total suitable area within each EEZ (might be helpful to rasterize the EEZ data)
+```{r}
+#| fig-width: 10
+#| fig-height: 7
+# Running the function for Pacific Geoduck
+can_we_grow_this_fish(8.5, 17.3, 0, -110, species = 'Pacific Geoduck')
+```
