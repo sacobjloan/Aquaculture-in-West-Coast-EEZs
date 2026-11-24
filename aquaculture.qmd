@@ -108,6 +108,8 @@ can_we_grow_this_fish <- function(tempmin, tempmax, depthmin, depthmax, species 
 }
 ```
 
+
+
 ```{r}
 #| fig-width: 10
 #| fig-height: 7
@@ -115,9 +117,14 @@ can_we_grow_this_fish <- function(tempmin, tempmax, depthmin, depthmax, species 
 can_we_grow_this_fish(11, 30, 0, -70, species = 'Oyster')
 ```
 
+# The Central California economic zone has the most viable land for oyster aquaculture (~4.4 thousand square kilometers), and the Northern California economic zone has the least (~0.4 thousand square kilometers)
+
 ```{r}
 #| fig-width: 10
 #| fig-height: 7
 # Running the function for Pacific Geoduck
 can_we_grow_this_fish(8.5, 17.3, 0, -110, species = 'Pacific Geoduck')
 ```
+
+
+# The Washington economic zone has the most viable land for Pacific Geoduck aquaculture (~11.5 thousand square kilometers), and the Southern California economic zone has the least (~5.2 thousand square kilometers). This is likely do to the colder waters in the North.
